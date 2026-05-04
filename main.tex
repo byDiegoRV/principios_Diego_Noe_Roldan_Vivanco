@@ -1,0 +1,141 @@
+\documentclass{article}
+\usepackage[spanish]{babel}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{parskip}
+
+\title{Patrones de Dise\~no en mi proyecto: Simulador de combates de Dragon Ball}
+\author{Diego}
+
+\date{Mayo 8 2026}
+
+\begin{document}
+
+\maketitle
+
+\tableofcontents
+\newpage
+
+\section{Introducci\'on}
+
+
+
+Los patrones se dividen en tres grupos principales: los \textbf{creacionales},
+que tienen que ver con c\'omo se crean los objetos; los \textbf{estructurales},
+que hablan de c\'omo se organizan entre s\'i y los \textbf{de comportamiento},
+que definen c\'omo interact\'uan y se comunican.
+
+Voy a explicar los patrones que yo ocupe en mi proyecto, Simulador de peleas de Dragon Ball.
+
+\section{Patrones Creacionales}
+
+Estos patrones se encargan de controlar c\'omo se crean los objetos dentro de
+una aplicaci\'on, puede parecer que eso es lo m\'as simple del
+mundo (solo haces \texttt{new Objeto()} y listo), pero en proyectos m\'as
+grandes eso puede volverse un problema.
+
+\subsection{Singleton}
+La idea es que de una clase solo exista una \'unica instancia en todo el programa. Imag\'inate que tienes una
+clase que maneja la conexi\'on a la base de datos. No tiene sentido crear
+cien conexiones distintas, con una sola alcanza.
+
+En el proyecto que estoy haciendo, el Singleton para el
+\texttt{AuthService}, donde guardaba la sesi\'on del usuario. No quer\'ia
+que hubiera varios objetos manejando el token al mismo tiempo porque eso
+generar\'ia inconsistencias.
+
+La desventaja que le veo es que a veces complica las pruebas, porque el
+estado global puede interferir entre tests, pero en general es muy \'util.
+
+\subsection{Factory Method}
+
+Este patr\'on b\'asicamente dice: en lugar de crear un objeto directamente,
+delegas esa responsabilidad a un m\'etodo o clase especial que decide qu\'e
+tipo de objeto crear.
+
+
+Lo us\'e de forma informal cuando el backend dec\'idia qu\'e tipo de respuesta
+construir dependiendo del resultado de la operaci\'on, no era un Factory
+Method puro, pero la idea era similar.
+
+\subsection{Builder}
+
+El Builder sirve cuando tienes objetos que se construyen paso a paso y
+que tienen muchos campos opcionales, en vez de tener un constructor con
+veinte par\'ametros (que nadie entiende en qu\'e orden van), usas un objeto
+intermedio que vas configurando.
+
+En mi proyecto cuando se va construyendo un objeto \texttt{Combate} con
+lugar, a\~no, intensidad, tipo, imagen y resultado, podr\'ia usar un Builder
+para ir arm\'andolo sin confundirte con los par\'ametros.
+
+Yo no lo implement\'e como tal, pero s\'i lo tuve en mente cuando
+dise\~n\'e los formularios de creaci\'on de combates en Flutter, iba llenando
+campo por campo antes de mandar todo al backend.
+
+\section{Patrones Estructurales}
+
+Estos patrones se enfocan en c\'omo se relacionan y se organizan las clases
+entre s\'i, sirven para que el c\'odigo sea m\'as flexible y f\'acil de mantener
+sin tener que cambiar todo cada vez que algo cambia.
+
+\subsection{Repository}
+
+Este fue el que m\'as us\'e en el proyecto, la idea es poner una capa entre
+la l\'ogica de la aplicaci\'on y el origen de los datos (que puede ser una
+base de datos, una API, lo que sea).
+
+En Flutter tengo una clase \texttt{CombateRepository} que es la \'unica
+que sab\'ia c\'omo hablar con el backend, las pantallas no llamaban
+directamente al servicio HTTP, sino que le ped\'ian al repositorio, as\'i,
+si en alg\'un momento cambiaba la URL o la forma de obtener datos solo
+ten\'ia que modificar el repositorio y no tocar todas las pantallas.
+
+Es un patr\'on muy pr\'actico.
+
+\subsection{Adapter}
+
+El Adapter sirve cuando tienes dos partes del sistema que no hablan el
+mismo idioma y necesitas un intermediario que traduzca.
+
+En mi proyecto lo vi reflejado en los m\'etodos \texttt{fromJson()} de los
+modelos en Dart, el backend devolv\'ia JSON con ciertos nombres de campos,
+y el modelo se encargaba de traducirlos al formato que usaba Flutter
+internamente.
+
+\subsection{Facade}
+
+El Facade es b\'asicamente crear una clase sencilla que oculte la
+complejidad interna, desde afuera ves una interfaz simple, pero por
+dentro puede estar haciendo muchas cosas.
+
+MI \texttt{ApiService} del proyecto funcion m\'as o menos as\'i, las
+pantallas solo llaman m\'etodos como \texttt{obtenerCombates()} sin
+preocuparse por los  HTTP, el manejo del token etc, 
+todo eso estaba escondido adentro del ApiService.
+
+Es muy \'util para mantener el c\'odigo de las pantallas limpio y enfocado
+solo en mostrar informaci\'on.
+
+
+
+
+
+
+
+\section{Conclusi\'on}
+
+La verdad es que al principio me parec\'ia que los patrones de dise\~no son muy didicles de aplicar en proyectos reales, pero conforme fui entendiendo, haciendo practicas en clas y lo estoy apliacando en mi proyecto
+me doy cuenta de que los estaba usando sin saberlo, o que muchas
+cosas que hac\'ia por intuici\'on ten\'ian un nombre y una raz\'on de ser.
+
+No creo que haya que memorizar todos los patrones ni intentar usarlos
+todos en un mismo proyecto , laa clave es entender el problema que resuelve
+cada uno y tenerlos en mente para cuando uno los necesite.
+
+
+
+\end{document}
+
+
