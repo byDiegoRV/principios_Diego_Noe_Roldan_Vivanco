@@ -1,0 +1,611 @@
+\documentclass{article}
+\usepackage[spanish]{babel}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{parskip}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+ 
+% ── Estilo para código Java ──────────────────────────────────────────────────
+\lstdefinestyle{javaStyle}{
+  language=Java,
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{blue}\bfseries,
+  stringstyle=\color{orange},
+  commentstyle=\color{gray}\itshape,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  stepnumber=1,
+  numbersep=6pt,
+  backgroundcolor=\color{gray!8},
+  frame=single,
+  rulecolor=\color{gray!40},
+  breaklines=true,
+  breakatwhitespace=false,
+  tabsize=4,
+  captionpos=b,
+  showstringspaces=false
+}
+ 
+% ── Estilo para código Dart / Flutter ────────────────────────────────────────
+\lstdefinestyle{dartStyle}{
+  language=Java,          % Dart no es nativo, Java da resaltado aceptable
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{teal}\bfseries,
+  stringstyle=\color{orange},
+  commentstyle=\color{gray}\itshape,
+  morekeywords={class, final, const, required, async, await, Future, String,
+                bool, int, List, Map, Widget, override, get, null, void,
+                static, factory, extends, implements, new, return, if,
+                else, true, false, late, var, dynamic, super, this,
+                import, export, package},
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  stepnumber=1,
+  numbersep=6pt,
+  backgroundcolor=\color{teal!6},
+  frame=single,
+  rulecolor=\color{teal!30},
+  breaklines=true,
+  breakatwhitespace=false,
+  tabsize=2,
+  captionpos=b,
+  showstringspaces=false
+}
+ 
+\title{Patrones de Dise\~no en mi proyecto:\\Simulador de Combates de Dragon Ball}
+\author{Diego}
+\date{Mayo 5, 2026}
+ 
+\begin{document}
+ 
+\maketitle
+\tableofcontents
+\newpage
+ 
+% ============================================================================
+\section{Introducci\'on}
+% ============================================================================
+ 
+Los patrones de dise\~no son soluciones probadas a problemas comunes en el
+desarrollo de software. Se dividen en tres grupos principales: los
+\textbf{creacionales}, que tienen que ver con c\'omo se crean los objetos;
+los \textbf{estructurales}, que hablan de c\'omo se organizan entre s\'i, y
+los \textbf{de comportamiento}, que definen c\'omo interact\'uan y se comunican.
+ 
+En este documento explico los patrones que utilic\'e en mi proyecto,
+\textit{Simulador de peleas de Dragon Ball}, el cual est\'a compuesto por:
+ 
+\begin{itemize}
+  \item \textbf{Backend:} API REST en Java con Spring Boot 3, Spring Security y
+        JWT, conectada a una base de datos PostgreSQL en Supabase y desplegada
+        en Render.
+  \item \textbf{Frontend:} Aplicaci\'on m\'ovil en Flutter (Dart) que consume la
+        API y sube im\'agenes directamente a Cloudinary.
+\end{itemize}
+ 
+% ============================================================================
+\section{Patrones Creacionales}
+% ============================================================================
+ 
+Estos patrones se encargan de controlar c\'omo se crean los objetos dentro de
+una aplicaci\'on. Puede parecer que eso es lo m\'as simple del mundo (solo haces
+\texttt{new Objeto()} y listo), pero en proyectos m\'as grandes eso puede
+volverse un problema.
+ 
+% ----------------------------------------------------------------------------
+\subsection{Singleton}
+% ----------------------------------------------------------------------------
+ 
+La idea es que de una clase solo exista una \'unica instancia en todo el
+programa. Imag\'inate que tienes una clase que maneja la conexi\'on a la base
+de datos: no tiene sentido crear cien conexiones distintas, con una sola
+alcanza.
+ 
+En el proyecto utilic\'e el Singleton para el \texttt{AuthService} en Flutter,
+donde guardo la sesi\'on del usuario. No quer\'ia que hubiera varios objetos
+manejando el token al mismo tiempo porque eso generar\'ia inconsistencias.
+ 
+\subsubsection*{Implementaci\'on en el Frontend (Dart / Flutter)}
+ 
+La clase \texttt{AuthService} declara un campo est\'atico \texttt{instance}
+que es la \'unica instancia posible. El constructor privado \texttt{AuthService.\_()}
+impide que cualquier otra parte del c\'odigo pueda crear un objeto nuevo.
+ 
+\begin{lstlisting}[style=dartStyle, caption={AuthService -- patr\'on Singleton (lib/services/auth\_service.dart)}]
+class AuthService {
+  static const _keyToken   = 'auth_token';
+  static const _keyUsuario = 'auth_usuario';
+ 
+  // Unica instancia global; se accede con AuthService.instance
+  static final AuthService instance = AuthService._();
+  AuthService._();   // Constructor privado: nadie mas puede instanciar
+ 
+  Usuario? _usuario;
+ 
+  Usuario? get usuario       => _usuario;
+  bool     get estaAutenticado => _usuario != null;
+  String?  get token           => _usuario?.token;
+ 
+  // Cargar la sesion guardada al arrancar la app
+  Future<void> cargarSesion() async {
+    final prefs = await SharedPreferences.getInstance();
+    final json  = prefs.getString(_keyUsuario);
+    if (json != null) {
+      try {
+        _usuario = Usuario.fromJson(jsonDecode(json));
+      } catch (_) {
+        await cerrarSesion();
+      }
+    }
+  }
+  // ... resto de metodos (login, registrar, cerrarSesion)
+}
+\end{lstlisting}
+ 
+En \texttt{main.dart} se accede al singleton antes de arrancar la app:
+ 
+\begin{lstlisting}[style=dartStyle, caption={Uso del Singleton en main.dart}]
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Se usa la instancia unica para cargar el token guardado
+  await AuthService.instance.cargarSesion();
+  runApp(const DragonBallApp());
+}
+\end{lstlisting}
+ 
+Cualquier widget del proyecto puede obtener el token actual con
+\texttt{AuthService.instance.token} sin necesidad de pasar ning\'un objeto
+entre pantallas.
+ 
+La desventaja que le veo es que a veces complica las pruebas, porque el
+estado global puede interferir entre tests, pero en general es muy \'util.
+ 
+% ----------------------------------------------------------------------------
+\subsection{Factory Method}
+% ----------------------------------------------------------------------------
+ 
+Este patr\'on b\'asicamente dice: en lugar de crear un objeto directamente,
+delegas esa responsabilidad a un m\'etodo o clase especial que decide qu\'e
+tipo de objeto crear.
+ 
+Lo us\'e de forma informal cuando el backend decide qu\'e tipo de respuesta
+construir dependiendo del resultado de la operaci\'on. Adem\'as, en Dart los
+constructores nombrados \texttt{fromJson} son una variante directa del
+Factory Method: delegan la creaci\'on del objeto a un m\'etodo que sabe c\'omo
+interpretar los datos entrantes.
+ 
+\subsubsection*{Implementaci\'on en el Frontend (Dart / Flutter)}
+ 
+Los modelos \texttt{Combate} y \texttt{Usuario} usan constructores
+\texttt{factory} que act\'uan como f\'abrica: reciben un \texttt{Map} JSON y
+devuelven una instancia correctamente inicializada.
+ 
+\begin{lstlisting}[style=dartStyle, caption={Factory Method en el modelo Combate (lib/models/combate.dart)}]
+class Combate {
+  final int?   id;
+  final int    anio;
+  final String intensidad;
+  final String tipo;
+  final String lugar;
+  final String creador;
+  final int?   usuarioId;
+  final String? resultado;
+  final String? fechaCreacion;
+  final ImagenCombate? imagen;
+ 
+  Combate({ this.id, required this.anio, required this.intensidad,
+            required this.tipo, required this.lugar, required this.creador,
+            this.usuarioId, this.resultado, this.fechaCreacion, this.imagen });
+ 
+  // Factory Method: decide como construir el objeto segun el JSON recibido
+  factory Combate.fromJson(Map<String, dynamic> j) => Combate(
+    id:           j['id'],
+    anio:         j['anio'],
+    intensidad:   j['intensidad'],
+    tipo:         j['tipo'],
+    lugar:        j['lugar'],
+    creador:      j['creador'],
+    usuarioId:    j['usuarioId'],
+    resultado:    j['resultado'],
+    fechaCreacion: j['fechaCreacion'],
+    imagen: j['imagen'] != null
+        ? ImagenCombate.fromJson(j['imagen'])
+        : null,   // <-- decision segun el dato disponible
+  );
+}
+\end{lstlisting}
+ 
+\subsubsection*{Implementaci\'on en el Backend (Java / Spring Boot)}
+ 
+En el backend, \texttt{AuthService} construye distintos tipos de respuesta
+seg\'un la operaci\'on (registro o login), encapsulando la l\'ogica de creaci\'on
+del objeto \texttt{AuthDtos.AuthResponse}.
+ 
+\begin{lstlisting}[style=javaStyle, caption={Creaci\'on de respuesta en AuthService (service/AuthService.java)}]
+@Service
+public class AuthService {
+ 
+    private final UsuarioRepository repo;
+    private final PasswordEncoder   encoder;
+    private final JwtUtil           jwtUtil;
+ 
+    public AuthDtos.AuthResponse registrar(AuthDtos.RegisterRequest req) {
+        if (repo.findByEmail(req.getEmail()).isPresent())
+            throw new IllegalArgumentException("Email ya registrado");
+ 
+        Usuario u = new Usuario();
+        u.setNombre(req.getNombre());
+        u.setEmail(req.getEmail());
+        u.setPassword(encoder.encode(req.getPassword()));
+        repo.save(u);
+ 
+        String token = jwtUtil.generarToken(u.getEmail());
+        // Factory: construye la respuesta segun el contexto (registro)
+        return new AuthDtos.AuthResponse(
+                token, u.getId(), u.getNombre(), u.getEmail());
+    }
+ 
+    public AuthDtos.AuthResponse login(AuthDtos.LoginRequest req) {
+        Usuario u = repo.findByEmail(req.getEmail())
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Usuario no encontrado"));
+        if (!encoder.matches(req.getPassword(), u.getPassword()))
+            throw new IllegalArgumentException("Contrasena incorrecta");
+ 
+        String token = jwtUtil.generarToken(u.getEmail());
+        // Factory: construye la respuesta segun el contexto (login)
+        return new AuthDtos.AuthResponse(
+                token, u.getId(), u.getNombre(), u.getEmail());
+    }
+}
+\end{lstlisting}
+ 
+% ----------------------------------------------------------------------------
+\subsection{Builder}
+% ----------------------------------------------------------------------------
+ 
+El Builder sirve cuando tienes objetos que se construyen paso a paso y
+que tienen muchos campos opcionales. En vez de tener un constructor con
+veinte par\'ametros (que nadie entiende en qu\'e orden van), usas un objeto
+intermedio que vas configurando.
+ 
+En mi proyecto, cuando se construye un objeto \texttt{Combate} con lugar,
+a\~no, intensidad, tipo, imagen y resultado, se podr\'ia usar un Builder para
+ir arm\'andolo sin confundirse con los par\'ametros. Yo no lo implement\'e como
+patr\'on formal, pero la misma idea est\'a presente en el formulario de
+creaci\'on de combates en Flutter: el usuario llena campo por campo antes de
+mandar todo al backend, y en el backend, \texttt{CombateService} tambi\'en
+construye el resultado del combate de forma incremental.
+ 
+\subsubsection*{Implementaci\'on en el Backend (Java / Spring Boot)}
+ 
+El m\'etodo \texttt{simularCombate} es el mejor ejemplo: comienza con un
+\texttt{Combate} base y lo va enriqueciendo paso a paso (c\'alculo de stats,
+bonus por intensidad, bonus por tipo, bonus por lugar, evento aleatorio,
+ganador final) antes de persistirlo.
+ 
+\begin{lstlisting}[style=javaStyle, caption={Construcci\'on incremental del resultado en CombateService (service/CombateService.java)}]
+public Combate simularCombate(Long id) {
+    Optional<Combate> opt = repo.findById(id);
+    if (opt.isEmpty()) return null;
+    Combate c = opt.get();
+ 
+    // Paso 1: stats base
+    int ataque    = random.nextInt(100) + 1;
+    int defensa   = random.nextInt(100) + 1;
+    int velocidad = random.nextInt(100) + 1;
+ 
+    // Paso 2: bonus segun intensidad
+    switch (c.getIntensidad().toLowerCase()) {
+        case "epico"  -> { ataque += 20; velocidad += 15; }
+        case "alto"   -> { ataque += 10; velocidad += 5;  }
+        case "medio"  ->   ataque += 5;
+    }
+ 
+    // Paso 3: bonus segun tipo de combate
+    switch (c.getTipo().toLowerCase()) {
+        case "supervivencia" -> defensa += 15;
+        case "equipo"        -> { ataque += 10; defensa += 10; }
+    }
+ 
+    // Paso 4: bonus segun lugar
+    switch (c.getLugar().toLowerCase()) {
+        case "namek"  -> ataque    += 10;
+        case "torneo" -> velocidad += 10;
+        case "tierra" -> defensa   += 5;
+    }
+ 
+    // Paso 5: evento y ganador
+    String evento  = generarEvento();
+    String ganador = (ataque + velocidad) >= (defensa + random.nextInt(80))
+            ? "Guerrero A" : "Guerrero B";
+ 
+    // Paso 6: ensamblar el resultado final y persistir
+    c.setResultado(
+        "Lugar: "      + c.getLugar()      +
+        " | Intensidad: " + c.getIntensidad() +
+        " | Evento: "  + evento            +
+        " | ATQ:" + ataque + " DEF:" + defensa + " VEL:" + velocidad +
+        " | Ganador: " + ganador
+    );
+    return repo.save(c);
+}
+\end{lstlisting}
+ 
+\subsubsection*{Reflejo en el Frontend (Dart / Flutter)}
+ 
+En la pantalla \texttt{CrearCombateScreen} el usuario va llenando campo por
+campo (a\~no, intensidad, tipo, lugar, creador, imagen), y solo cuando todo
+est\'a listo se ensambla el objeto y se env\'ia:
+ 
+\begin{lstlisting}[style=dartStyle, caption={Construcci\'on incremental del Combate en el formulario (screens/crear\_combate\_screen.dart -- fragmento)}]
+// Cada campo se guarda en su variable de estado
+String _lugar      = '';
+String _intensidad = 'Medio';
+String _tipo       = 'Individual';
+int    _anio       = 2024;
+String _creador    = '';
+ 
+// Al confirmar, se ensambla el objeto completo
+void _guardar() async {
+  final combate = Combate(
+    anio:       _anio,
+    intensidad: _intensidad,
+    tipo:       _tipo,
+    lugar:      _lugar,
+    creador:    _creador,
+  );
+  await _repo.crearCombate(combate);  // Se envia solo cuando esta completo
+}
+\end{lstlisting}
+ 
+% ============================================================================
+\section{Patrones Estructurales}
+% ============================================================================
+ 
+Estos patrones se enfocan en c\'omo se relacionan y se organizan las clases
+entre s\'i. Sirven para que el c\'odigo sea m\'as flexible y f\'acil de mantener
+sin tener que cambiar todo cada vez que algo cambia.
+ 
+% ----------------------------------------------------------------------------
+\subsection{Repository}
+% ----------------------------------------------------------------------------
+ 
+Este fue el que m\'as us\'e en el proyecto. La idea es poner una capa entre
+la l\'ogica de la aplicaci\'on y el origen de los datos (que puede ser una
+base de datos, una API, lo que sea).
+ 
+En Flutter tengo una clase \texttt{CombateRepository} que es la \'unica
+que sabe c\'omo hablar con el backend. Las pantallas no llaman directamente
+al servicio HTTP, sino que le piden al repositorio. As\'i, si en alg\'un momento
+cambia la URL o la forma de obtener datos, solo tengo que modificar el
+repositorio y no tocar todas las pantallas.
+ 
+\subsubsection*{Implementaci\'on en el Frontend (Dart / Flutter)}
+ 
+\begin{lstlisting}[style=dartStyle, caption={CombateRepository -- capa de acceso a datos (lib/repositories/combate\_repository.dart)}]
+import '../models/combate.dart';
+import '../services/api_service.dart';
+ 
+class CombateRepository {
+  final _api = ApiService();   // Dependencia interna oculta al caller
+ 
+  // Las pantallas solo conocen estos metodos, no saben nada de HTTP
+  Future<List<Combate>> obtenerCombates()       => _api.obtenerCombates();
+  Future<List<Combate>> obtenerMisCombates()    => _api.obtenerMisCombates();
+  Future<Combate>       obtenerPorId(int id)    => _api.obtenerPorId(id);
+  Future<Combate>       crearCombate(Combate c) => _api.crearCombate(c);
+  Future<Combate>       actualizarCombate(int id, Combate c)
+                                                => _api.actualizarCombate(id, c);
+  Future<Combate>       actualizarImagen(int id, String url)
+                                                => _api.actualizarImagen(id, url);
+  Future<void>          eliminarCombate(int id) => _api.eliminarCombate(id);
+  Future<Combate>       simularCombate(int id)  => _api.simularCombate(id);
+ 
+  Future<Map<String, int>>     obtenerReacciones(int id)
+                                                => _api.obtenerReacciones(id);
+  Future<List<String>>         obtenerMisReacciones(int id)
+                                                => _api.obtenerMisReacciones(id);
+  Future<Map<String, dynamic>> toggleReaccion(int id, String t)
+                                                => _api.toggleReaccion(id, t);
+}
+\end{lstlisting}
+ 
+\subsubsection*{Implementaci\'on en el Backend (Java / Spring Boot)}
+ 
+En el backend, Spring Data JPA aplica el mismo patr\'on de forma autom\'atica.
+\texttt{CombateRepository} extiende \texttt{JpaRepository} y define consultas
+personalizadas sin que el servicio sepa nada de SQL:
+ 
+\begin{lstlisting}[style=javaStyle, caption={CombateRepository en Spring Data JPA (repository/CombateRepository.java)}]
+package com.example.dragon.repository;
+ 
+import com.example.dragon.entity.Combate;
+import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.List;
+ 
+public interface CombateRepository extends JpaRepository<Combate, Long> {
+    // Spring genera automaticamente el SQL; el servicio solo llama al metodo
+    List<Combate> findByUsuarioId(Long usuarioId);
+}
+\end{lstlisting}
+ 
+% ----------------------------------------------------------------------------
+\subsection{Adapter}
+% ----------------------------------------------------------------------------
+ 
+El Adapter sirve cuando tienes dos partes del sistema que no hablan el
+mismo idioma y necesitas un intermediario que traduzca.
+ 
+En mi proyecto lo vi reflejado en los m\'etodos \texttt{fromJson()} de los
+modelos en Dart: el backend devuelve JSON con ciertos nombres de campos, y el
+modelo se encarga de traducirlos al formato que usa Flutter internamente. De
+forma equivalente, \texttt{toJson()} hace la traducci\'on en sentido contrario.
+ 
+\subsubsection*{Implementaci\'on en el Frontend (Dart / Flutter)}
+ 
+\begin{lstlisting}[style=dartStyle, caption={Adapter JSON$\leftrightarrow$Dart en el modelo Combate (lib/models/combate.dart)}]
+class Combate {
+  // ...campos internos de Flutter...
+ 
+  // Adapter: convierte JSON del backend -> objeto Dart
+  factory Combate.fromJson(Map<String, dynamic> j) => Combate(
+    id:           j['id'],
+    anio:         j['anio'],
+    intensidad:   j['intensidad'],
+    tipo:         j['tipo'],
+    lugar:        j['lugar'],
+    creador:      j['creador'],
+    usuarioId:    j['usuarioId'],    // clave snake_case del backend
+    resultado:    j['resultado'],
+    fechaCreacion: j['fechaCreacion'],
+    imagen: j['imagen'] != null
+        ? ImagenCombate.fromJson(j['imagen'])
+        : null,
+  );
+ 
+  // Adapter inverso: convierte objeto Dart -> JSON para el backend
+  Map<String, dynamic> toJson() => {
+    'anio':       anio,
+    'intensidad': intensidad,
+    'tipo':       tipo,
+    'lugar':      lugar,
+    'creador':    creador,
+  };
+}
+\end{lstlisting}
+ 
+\subsubsection*{Implementaci\'on en el Backend (Java / Spring Boot)}
+ 
+En el backend, los DTOs de \texttt{AuthDtos} cumplen el mismo rol: adaptan
+los datos que llegan del cliente al formato que usa la l\'ogica interna, y
+viceversa para las respuestas.
+ 
+\begin{lstlisting}[style=javaStyle, caption={Adapter entre capas con DTOs (dto/AuthDtos.java -- fragmento)}]
+public class AuthDtos {
+ 
+    // Adapter de entrada: traduce el JSON del cliente a un objeto Java
+    public static class LoginRequest {
+        private String email;
+        private String password;
+        public String getEmail()    { return email; }
+        public String getPassword() { return password; }
+    }
+ 
+    // Adapter de salida: traduce el objeto Java al JSON que espera Flutter
+    public static class AuthResponse {
+        private final String token;
+        private final Long   usuarioId;   // nombre que usa Flutter
+        private final String nombre;
+        private final String email;
+ 
+        public AuthResponse(String token, Long usuarioId,
+                            String nombre, String email) {
+            this.token     = token;
+            this.usuarioId = usuarioId;
+            this.nombre    = nombre;
+            this.email     = email;
+        }
+        // getters...
+    }
+}
+\end{lstlisting}
+ 
+% ----------------------------------------------------------------------------
+\subsection{Facade}
+% ----------------------------------------------------------------------------
+ 
+El Facade es b\'asicamente crear una clase sencilla que oculte la complejidad
+interna. Desde afuera ves una interfaz simple, pero por dentro puede estar
+haciendo muchas cosas.
+ 
+Mi \texttt{ApiService} del proyecto funciona exactamente as\'i: las pantallas
+solo llaman m\'etodos como \texttt{obtenerCombates()} sin preocuparse por los
+detalles HTTP, el manejo del token, la serializaci\'on JSON, etc. Todo eso
+est\'a escondido dentro del \texttt{ApiService}.
+ 
+\subsubsection*{Implementaci\'on en el Frontend (Dart / Flutter)}
+ 
+\begin{lstlisting}[style=dartStyle, caption={ApiService -- Facade sobre HTTP (lib/services/api\_service.dart)}]
+class ApiService {
+  static const String baseUrl = 'https://dragonw.onrender.com';
+  static const String _path   = '$baseUrl/api/combates';
+  static const String _rpath  = '$baseUrl/api/reacciones';
+ 
+  // Detalle interno: headers publicos
+  static const Map<String, String> _headersPublic = {
+    'Content-Type': 'application/json',
+  };
+ 
+  // Detalle interno: headers con JWT inyectado automaticamente
+  Map<String, String> get _headers {
+    final token = AuthService.instance.token;
+    return {
+      'Content-Type': 'application/json',
+      if (token != null) 'Authorization': 'Bearer $token',
+    };
+  }
+ 
+  // Interfaz simple que usan las pantallas: un solo metodo, cero detalles HTTP
+  Future<List<Combate>> obtenerCombates() async {
+    final res = await http.get(Uri.parse(_path));
+    if (res.statusCode == 200) {
+      final list = jsonDecode(res.body) as List;
+      return list.map((e) => Combate.fromJson(e)).toList();
+    }
+    throw Exception('Error ${res.statusCode} al obtener combates');
+  }
+ 
+  // Toggle de reaccion: internamente hace POST, maneja token, decodifica JSON
+  Future<Map<String, dynamic>> toggleReaccion(
+      int combateId, String tipo) async {
+    final res = await http.post(
+      Uri.parse('$_rpath/$combateId/toggle'),
+      headers: _headers,                       // JWT oculto al caller
+      body: jsonEncode({'tipo': tipo}),
+    );
+    if (res.statusCode == 200) {
+      final data   = jsonDecode(res.body) as Map<String, dynamic>;
+      final conteo = data['conteo'] as Map<String, dynamic>;
+      return {
+        'added': data['added'] as bool,
+        'tipo':  data['tipo']  as String,
+        'like':  (conteo['like']  as num).toInt(),
+        'heart': (conteo['heart'] as num).toInt(),
+        'laugh': (conteo['laugh'] as num).toInt(),
+      };
+    }
+    throw Exception('Error ${res.statusCode}: ${res.body}');
+  }
+  // ... todos los demas metodos siguen el mismo patron
+}
+\end{lstlisting}
+ 
+Gracias al Facade, el c\'odigo de las pantallas queda limpio y enfocado solo
+en mostrar informaci\'on:
+ 
+\begin{lstlisting}[style=dartStyle, caption={Uso del Facade desde una pantalla (fragmento de home\_screen.dart)}]
+// La pantalla no sabe nada de HTTP, tokens ni JSON
+final combates = await _repo.obtenerCombates();
+setState(() => _combates = combates);
+\end{lstlisting}
+ 
+% ============================================================================
+\section{Conclusi\'on}
+% ============================================================================
+ 
+Al principio me parec\'ia que los patrones de dise\~no son muy dif\'iciles de
+aplicar en proyectos reales, pero conforme fui entendiendo y practicando en
+clase, y al mismo tiempo aplic\'andolos en mi proyecto, me di cuenta de que los
+estaba usando sin saberlo, o que muchas cosas que hac\'ia por intuici\'on ten\'ian
+un nombre y una raz\'on de ser.
+ 
+No creo que haya que memorizar todos los patrones ni intentar usarlos todos
+en un mismo proyecto. La clave es entender el problema que resuelve cada uno
+y tenerlos en mente para cuando uno los necesite.
+ 
+\end{document}
+
